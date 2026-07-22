@@ -27,7 +27,10 @@ app.add_middleware(
 # Environment Variables
 # -------------------------------------------------
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "phi-3-mini-4k-instruct-q4")   # ✅ FIXED MODEL
+
+# IMPORTANT: model must come from environment
+# because Groq keeps changing model names
+GROQ_MODEL = os.getenv("GROQ_MODEL", None)
 
 logger.info("--------------------------------------------------")
 logger.info("DEBUG: Starting Nova backend")
@@ -58,6 +61,10 @@ async def nova_endpoint(payload: dict):
         logger.error("DEBUG: GROQ_API_KEY is missing!")
         return {"reply": "Error: GROQ_API_KEY is not set in environment variables"}
 
+    if GROQ_MODEL is None:
+        logger.error("DEBUG: GROQ_MODEL is missing!")
+        return {"reply": "Error: GROQ_MODEL is not set in environment variables"}
+
     user_text = payload.get("text", "")
     if not user_text:
         logger.error("DEBUG: Missing 'text' field")
@@ -70,7 +77,7 @@ async def nova_endpoint(payload: dict):
     }
 
     data = {
-        "model": GROQ_MODEL,   # ✅ FIXED MODEL
+        "model": GROQ_MODEL,
         "messages": [
             {"role": "user", "content": user_text}
         ]
