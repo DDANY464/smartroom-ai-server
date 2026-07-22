@@ -68,7 +68,7 @@ async def nova_endpoint(payload: dict):
     }
 
     data = {
-        "model": "phi-3-mini-4k-instruct",
+        model = os.getenv("GROQ_MODEL", "phi-3-mini-4k-instruct-q4")
         "messages": [
             {"role": "user", "content": user_text}
         ]
