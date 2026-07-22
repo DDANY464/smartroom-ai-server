@@ -1,113 +1,121 @@
+# main.py
 import os
 import logging
-import requests
-from fastapi import FastAPI
+from typing import Dict
+
+import httpx               # async HTTP client (replaces requests)
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 # -------------------------------------------------
-# Logging Setup
+# Logging – never print the raw secret
 # -------------------------------------------------
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("nova-debug-backend")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("nova-debug-backend")
 
 # -------------------------------------------------
-# FastAPI App
+# FastAPI app
 # -------------------------------------------------
-app = FastAPI()
+app = FastAPI(
+    title="Nova Groq Proxy",
+    description="Thin wrapper that forwards a user message to a Groq model.",
+    version="0.1.0",
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # tighten in prod (e.g. ["https://my‑frontend.com"])
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # -------------------------------------------------
-# Environment Variables
+# Environment variables
 # -------------------------------------------------
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+if not GROQ_API_KEY:
+    raise RuntimeError("❗️ GROQ_API_KEY is not set in the environment")
 
-logger.info("--------------------------------------------------")
-logger.info("DEBUG: Starting Nova backend")
-logger.info(f"DEBUG: GROQ_API_KEY loaded: {GROQ_API_KEY}")
-logger.info("--------------------------------------------------")
+# Primary model – you can override via env var on Railway
+GROQ_MODEL = os.getenv("GROQ_MODEL", "phi-3-mini-4k-instruct")
+GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
+
+log.info("🚀 Nova backend starting – model=%s", GROQ_MODEL)
 
 # -------------------------------------------------
-# Routes
+# Pydantic request schema (validation + docs)
 # -------------------------------------------------
+class NovaPayload(BaseModel):
+    text: str = Field(..., min_length=1, description="User‑provided prompt")
 
-@app.get("/")
-def home():
+# -------------------------------------------------
+# Shared async HTTP client (connection pool)
+# -------------------------------------------------
+client = httpx.AsyncClient(timeout=30.0)
+
+
+async def _call_groq(user_text: str, model: str) -> str:
+    """Send the chat request to Groq and return the assistant reply."""
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": user_text}],
+    }
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    log.debug("POST %s – model=%s – user_text=%s", GROQ_ENDPOINT, model, user_text[:30] + "...")
+
+    resp = await client.post(GROQ_ENDPOINT, json=payload, headers=headers)
+
+    if resp.is_success:
+        data = resp.json()
+        return data["choices"][0]["message"]["content"]
+    else:
+        # Try to surface a useful message from Groq
+        try:
+            err = resp.json()
+            msg = err.get("error", {}).get("message", resp.text)
+        except Exception:
+            msg = resp.text
+        raise HTTPException(status_code=resp.status_code, detail=f"Groq error: {msg}")
+
+
+# -------------------------------------------------
+# Health‑check route
+# -------------------------------------------------
+@app.get("/", summary="Simple health check")
+async def root():
     return {"status": "ok", "message": "Nova backend running (debug mode)"}
 
 
-@app.post("/nova")
-async def nova_endpoint(payload: dict):
-    """
-    Debug endpoint that prints EVERYTHING sent to Groq.
-    """
-
-    logger.info("--------------------------------------------------")
-    logger.info("DEBUG: /nova endpoint hit")
-    logger.info(f"DEBUG: Incoming payload: {payload}")
-
-    if GROQ_API_KEY is None:
-        logger.error("DEBUG: GROQ_API_KEY is missing!")
-        return {"reply": "Error: GROQ_API_KEY is not set in environment variables"}
-
-    user_text = payload.get("text", "")
-    if not user_text:
-        logger.error("DEBUG: Missing 'text' field")
-        return {"reply": "Error: 'text' field is missing or empty in JSON body"}
-
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    data = {
-        model = os.getenv("GROQ_MODEL", "phi-3-mini-4k-instruct-q4")
-        "messages": [
-            {"role": "user", "content": user_text}
-        ]
-    }
-
-    logger.info("DEBUG: Sending request to Groq...")
-    logger.info(f"DEBUG: URL: {url}")
-    logger.info(f"DEBUG: Headers: {headers}")
-    logger.info(f"DEBUG: JSON Body: {data}")
+# -------------------------------------------------
+# Main endpoint
+# -------------------------------------------------
+@app.post("/nova", summary="Forward a user prompt to Groq")
+async def nova_endpoint(payload: NovaPayload):
+    log.info("🔔 /nova hit – payload=%s", payload.dict())
 
     try:
-        response = requests.post(url, headers=headers, json=data)
-
-        logger.info("DEBUG: Groq responded!")
-        logger.info(f"DEBUG: Status Code: {response.status_code}")
-        logger.info(f"DEBUG: Raw Response Text: {response.text}")
-
-        response.raise_for_status()
-
-        groq_json = response.json()
-        reply = groq_json["choices"][0]["message"]["content"]
-
-        logger.info(f"DEBUG: Parsed reply: {reply}")
-        logger.info("--------------------------------------------------")
-
+        reply = await _call_groq(payload.text, GROQ_MODEL)
+        log.info("✅ Groq reply received (len=%d)", len(reply))
         return {"reply": reply}
-
-    except Exception as e:
-        logger.error("DEBUG: Groq API ERROR!")
-        logger.error(f"DEBUG: Exception: {str(e)}")
-        logger.info("--------------------------------------------------")
-        return {"reply": f"Error: {str(e)}"}
+    except HTTPException as exc:
+        # If the model has been de‑commissioned, give a clear hint
+        if exc.status_code == 400 and "decommissioned" in str(exc.detail).lower():
+            log.warning("Model %s is decommissioned – ask Groq for a replacement", GROQ_MODEL)
+        raise  # FastAPI will turn this into a proper JSON error response
 
 
 # -------------------------------------------------
-# Railway Port Binding
+# Railway / local entrypoint
 # -------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.getenv("PORT", 8080))
-    logger.info(f"DEBUG: Starting Uvicorn on port {port}")
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    log.info("🚀 Starting uvicorn on 0.0.0.0:%s", port)
+    uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
