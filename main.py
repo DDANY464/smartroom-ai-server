@@ -68,7 +68,7 @@ async def nova_endpoint(payload: dict):
     }
 
     data = {
-        "model": "llama3-70b-8192",
+        "model": "phi-3-mini-4k-instruct",
         "messages": [
             {"role": "user", "content": user_text}
         ]
