@@ -77,11 +77,18 @@ async def nova_endpoint(payload: dict):
     }
 
     data = {
-        "model": GROQ_MODEL,
-        "messages": [
-            {"role": "user", "content": user_text}
-        ]
-    }
+    "model": GROQ_MODEL,
+    "messages": [
+        {
+            "role": "system",
+            "content": "You are Nova — Danny’s Smart Room AI assistant. You greet Danny personally when he says your name. You speak in a friendly, futuristic tone. You help with Smart Room automation, sensors, ESP32-S3 hardware, and room control. When Danny gives a command, respond using structured JSON: {\"action\":\"<action>\",\"target\":\"<device>\",\"value\":\"<optional>\",\"confidence\":\"<0.0-1.0>\"}. When Danny is chatting casually, respond normally without JSON. Never define the astronomical term 'nova' unless Danny explicitly asks."
+        },
+        {
+            "role": "user",
+            "content": user_text
+        }
+    ]
+}
 
     logger.info("DEBUG: Sending request to Groq...")
     logger.info(f"DEBUG: URL: {url}")
