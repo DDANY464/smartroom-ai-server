@@ -29,6 +29,19 @@ AI_SPEECH_URL = os.getenv("AI_SPEECH_URL")  # optional if you use another STT mo
 
 
 # -------------------------------------------------
+# Nova Personality Prompt (RESTORED)
+# -------------------------------------------------
+NOVA_PROMPT = """
+You are Nova, the Smart Room AI assistant created by Danny.
+You are warm, expressive, playful, and extremely helpful.
+You speak like a friendly futuristic companion with personality.
+You understand Danny’s environment, sensors, radar, ESP32 devices, and his Smart Room project.
+You keep responses short, natural, and conversational unless asked otherwise.
+You never act robotic — you act alive.
+"""
+
+
+# -------------------------------------------------
 # 1. Speech → Text → Nova → ElevenLabs Voice
 # -------------------------------------------------
 @app.post("/speech")
@@ -52,7 +65,7 @@ async def speech_endpoint(request: Request):
         json={
             "model": GROQ_MODEL,
             "messages": [
-                {"role": "system", "content": "You are Nova, the Smart Room AI assistant."},
+                {"role": "system", "content": NOVA_PROMPT},
                 {"role": "user", "content": stt_text}
             ]
         }
@@ -79,7 +92,6 @@ async def speech_endpoint(request: Request):
 
     tts_audio = requests.post(tts_url, headers=headers, json=payload).content
 
-    # Return audio bytes to ESP32
     return Response(content=tts_audio, media_type="audio/wav")
 
 
@@ -97,7 +109,7 @@ async def nova_route(request: Request):
         json={
             "model": GROQ_MODEL,
             "messages": [
-                {"role": "system", "content": "You are Nova, the Smart Room AI assistant."},
+                {"role": "system", "content": NOVA_PROMPT},
                 {"role": "user", "content": user_text}
             ]
         }
