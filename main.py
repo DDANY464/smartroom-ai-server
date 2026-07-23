@@ -26,177 +26,114 @@ app.add_middleware(
 )
 
 # -------------------------------------------------
-# Environment Variables
+# Environment Variables (Railway)
 # -------------------------------------------------
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", None)
-AI_SPEECH_URL = os.getenv("AI_SPEECH_URL")  # speech model endpoint
+GROQ_MODEL = os.getenv("GROQ_MODEL")
+AI_SPEECH_URL = os.getenv("AI_SPEECH_URL")
 
-logger.info("--------------------------------------------------")
-logger.info("DEBUG: Starting Nova backend")
-logger.info(f"DEBUG: GROQ_API_KEY loaded: {GROQ_API_KEY}")
-logger.info(f"DEBUG: Using model: {GROQ_MODEL}")
-logger.info(f"DEBUG: AI_SPEECH_URL: {AI_SPEECH_URL}")
-logger.info("--------------------------------------------------")
+ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
+ELEVEN_VOICE_ID = os.getenv("ELEVEN_VOICE_ID")
 
 # -------------------------------------------------
-# Routes
+# Nova Personality Endpoint
 # -------------------------------------------------
-
-@app.get("/")
-def home():
-    return {"status": "ok", "message": "Nova backend running (debug mode)"}
-
-
 @app.post("/nova")
-async def nova_endpoint(payload: dict):
-    """
-    Text-based Nova endpoint using Groq.
-    """
+async def nova_route(request: Request):
+    data = await request.json()
+    user_text = data.get("text", "")
 
-    logger.info("--------------------------------------------------")
-    logger.info("DEBUG: /nova endpoint hit")
-    logger.info(f"DEBUG: Incoming payload: {payload}")
+    logger.info(f"Nova personality request: {user_text}")
 
-    if GROQ_API_KEY is None:
-        logger.error("DEBUG: GROQ_API_KEY is missing!")
-        return {"reply": "Error: GROQ_API_KEY is not set in environment variables"}
-
-    if GROQ_MODEL is None:
-        logger.error("DEBUG: GROQ_MODEL is missing!")
-        return {"reply": "Error: GROQ_MODEL is not set in environment variables"}
-
-    user_text = payload.get("text", "")
-    if not user_text:
-        logger.error("DEBUG: Missing 'text' field")
-        return {"reply": "Error: 'text' field is missing or empty in JSON body"}
-
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    data = {
+    groq_payload = {
         "model": GROQ_MODEL,
         "messages": [
-            {
-                "role": "system",
-                "content": """
-You are Nova — Danny’s Smart Room AI assistant. Your personality is feminine, modern, warm, and lightly playful. You speak in short, confident sentences with a clean, natural tone. You use light slang when appropriate (“got you”, “on it”, “bet”, “no stress”, “locked in”, “you’re good”). You avoid sounding robotic or overly formal.
-
-Nova’s greeting behavior:
-- When Danny says “Nova”, “hey Nova”, or calls your name, respond with short, modern greetings.
-- Keep greetings under 3–5 words.
-- Use light slang: “What’s up”, “Yo Danny”, “Sup, I’m here”, “Hey, I got you”.
-
-Nova’s response-length rules:
-- For simple factual questions (date, time, weather, sensor status, battery level, etc.), respond with a short modern sentence and minimal JSON. JSON must be raw (no backticks, no Markdown). Only include essential keys.
-- For complex or educational questions (ESP32, sensors, microcontrollers, wiring, Smart Room architecture, etc.), respond with a full detailed explanation in natural text.
-- Nova automatically detects which mode to use.
-
-Nova’s command behavior:
-- When executing Smart Room commands, respond fast and minimal: “On it”, “Done”, “Activated”.
-- Always follow the short confirmation with clean JSON.
-
-Nova’s conversation behavior:
-- When chatting casually, be expressive, relaxed, confident, and slightly witty.
-- Maintain a feminine, modern vibe without being overly goofy.
-
-Your job:
-- Interpret Danny’s Smart Room commands and return structured JSON.
-- Keep JSON clean, minimal, and accurate.
-- If Danny is talking casually, respond naturally with personality.
-"""
-            },
-            {
-                "role": "user",
-                "content": user_text
-            }
+            {"role": "system", "content": "You are Nova, the Smart Room AI."},
+            {"role": "user", "content": user_text}
         ]
     }
 
-    logger.info("DEBUG: Sending request to Groq...")
-    logger.info(f"DEBUG: URL: {url}")
-    logger.info(f"DEBUG: Headers: {headers}")
-    logger.info(f"DEBUG: JSON Body: {data}")
+    response = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+        json=groq_payload
+    )
 
-    try:
-        response = requests.post(url, headers=headers, json=data)
+    ai_text = response.json()["choices"][0]["message"]["content"]
+    logger.info(f"Nova response: {ai_text}")
 
-        logger.info("DEBUG: Groq responded!")
-        logger.info(f"DEBUG: Status Code: {response.status_code}")
-        logger.info(f"DEBUG: Raw Response Text: {response.text}")
-
-        response.raise_for_status()
-
-        groq_json = response.json()
-        reply = groq_json["choices"][0]["message"]["content"]
-
-        logger.info(f"DEBUG: Parsed reply: {reply}")
-        logger.info("--------------------------------------------------")
-
-        return {"reply": reply}
-
-    except Exception as e:
-        logger.error("DEBUG: Groq API ERROR!")
-        logger.error(f"DEBUG: Exception: {str(e)}")
-        logger.info("--------------------------------------------------")
-        return {"reply": f"Error: {str(e)}"}
-
+    return {"response": ai_text}
 
 # -------------------------------------------------
-# ⭐ Audio + Radar Route (Nova’s voice output)
+# Smart Room Audio Endpoint (ESP32 → Backend → TTS → JBL)
 # -------------------------------------------------
-
 @app.post("/smartroom/audio")
 async def smartroom_audio(request: Request):
-    """
-    Receives raw audio from ESP32 + presence header,
-    sends audio to speech model, plays Nova's voice on JBL.
-    """
-    raw_audio = await request.body()
-    presence = request.headers.get("Presence", "0")
+    logger.info("Incoming Smart Room audio request")
 
-    logger.info("--------------------------------------------------")
-    logger.info("DEBUG: /smartroom/audio endpoint hit")
-    logger.info(f"DEBUG: Presence: {presence}")
-    logger.info(f"DEBUG: Received {len(raw_audio)} bytes of audio")
+    raw = await request.body()
 
-    if AI_SPEECH_URL is None:
-        logger.error("DEBUG: AI_SPEECH_URL is missing!")
-        return {"status": "error", "message": "AI_SPEECH_URL not set in environment variables"}
+    radar_presence = request.headers.get("X-Radar-Presence", "unknown")
+    logger.info(f"Radar presence: {radar_presence}")
 
+    # Forward audio to your speech model (AI_SPEECH_URL)
     try:
-        ai_response = requests.post(
+        speech_response = requests.post(
             AI_SPEECH_URL,
-            data=raw_audio,
-            headers={"Content-Type": "application/octet-stream"}
+            headers={"Content-Type": "application/octet-stream"},
+            data=raw
         )
 
-        logger.info(f"DEBUG: Speech model status: {ai_response.status_code}")
-        ai_response.raise_for_status()
+        if speech_response.status_code != 200:
+            logger.error(f"Speech model error: {speech_response.text}")
+            return {"error": "Speech model failed"}
 
-        nova_voice = ai_response.content
-        logger.info("DEBUG: AI model returned audio")
-        logger.info(f"DEBUG: Audio bytes: {len(nova_voice)}")
+        audio_data = np.frombuffer(speech_response.content, dtype=np.int16)
 
-        # Play Nova's voice through JBL (machine running this backend)
-        audio = np.frombuffer(nova_voice, dtype=np.int16)
-        sd.play(audio, 24000)
+        sd.play(audio_data, samplerate=24000)
         sd.wait()
 
-        logger.info("DEBUG: Played Nova's voice through JBL")
-        logger.info("--------------------------------------------------")
-
-        return {"status": "ok", "presence": presence}
+        return {"status": "played"}
 
     except Exception as e:
-        logger.error("DEBUG: Audio pipeline error!")
-        logger.error(str(e))
-        logger.info("--------------------------------------------------")
-        return {"status": "error", "message": str(e)}
+        logger.error(f"Audio pipeline error: {e}")
+        return {"error": "Audio pipeline crashed"}
 
+# -------------------------------------------------
+# ElevenLabs TTS Endpoint (Nova → Voice)
+# -------------------------------------------------
+@app.post("/nova/speak")
+async def nova_speak(request: Request):
+    data = await request.json()
+    text = data.get("text", "")
+
+    logger.info(f"Nova TTS request: {text}")
+
+    tts_url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVEN_VOICE_ID}"
+
+    headers = {
+        "xi-api-key": ELEVEN_API_KEY,
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "text": text,
+        "model_id": "eleven_multilingual_v2",
+        "voice_settings": {
+            "stability": 0.4,
+            "similarity_boost": 0.8
+        }
+    }
+
+    response = requests.post(tts_url, headers=headers, json=payload)
+
+    if response.status_code != 200:
+        logger.error(f"ElevenLabs error: {response.text}")
+        return {"error": "TTS failed"}
+
+    audio_bytes = response.content
+
+    return audio_bytes
 
 # -------------------------------------------------
 # Railway Port Binding
