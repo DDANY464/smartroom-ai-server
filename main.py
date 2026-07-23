@@ -1,7 +1,9 @@
 import os
 import logging
 import requests
-from fastapi import FastAPI
+import numpy as np
+import sounddevice as sd
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 # -------------------------------------------------
@@ -28,11 +30,13 @@ app.add_middleware(
 # -------------------------------------------------
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", None)
+AI_SPEECH_URL = os.getenv("AI_SPEECH_URL")  # speech model endpoint
 
 logger.info("--------------------------------------------------")
 logger.info("DEBUG: Starting Nova backend")
 logger.info(f"DEBUG: GROQ_API_KEY loaded: {GROQ_API_KEY}")
 logger.info(f"DEBUG: Using model: {GROQ_MODEL}")
+logger.info(f"DEBUG: AI_SPEECH_URL: {AI_SPEECH_URL}")
 logger.info("--------------------------------------------------")
 
 # -------------------------------------------------
@@ -47,7 +51,7 @@ def home():
 @app.post("/nova")
 async def nova_endpoint(payload: dict):
     """
-    Debug endpoint that prints EVERYTHING sent to Groq.
+    Text-based Nova endpoint using Groq.
     """
 
     logger.info("--------------------------------------------------")
@@ -73,9 +77,6 @@ async def nova_endpoint(payload: dict):
         "Content-Type": "application/json"
     }
 
-    # -------------------------------------------------
-    # ⭐ UPDATED NOVA PERSONALITY SYSTEM PROMPT
-    # -------------------------------------------------
     data = {
         "model": GROQ_MODEL,
         "messages": [
@@ -142,6 +143,59 @@ Your job:
         logger.error(f"DEBUG: Exception: {str(e)}")
         logger.info("--------------------------------------------------")
         return {"reply": f"Error: {str(e)}"}
+
+
+# -------------------------------------------------
+# ⭐ Audio + Radar Route (Nova’s voice output)
+# -------------------------------------------------
+
+@app.post("/smartroom/audio")
+async def smartroom_audio(request: Request):
+    """
+    Receives raw audio from ESP32 + presence header,
+    sends audio to speech model, plays Nova's voice on JBL.
+    """
+    raw_audio = await request.body()
+    presence = request.headers.get("Presence", "0")
+
+    logger.info("--------------------------------------------------")
+    logger.info("DEBUG: /smartroom/audio endpoint hit")
+    logger.info(f"DEBUG: Presence: {presence}")
+    logger.info(f"DEBUG: Received {len(raw_audio)} bytes of audio")
+
+    if AI_SPEECH_URL is None:
+        logger.error("DEBUG: AI_SPEECH_URL is missing!")
+        return {"status": "error", "message": "AI_SPEECH_URL not set in environment variables"}
+
+    try:
+        ai_response = requests.post(
+            AI_SPEECH_URL,
+            data=raw_audio,
+            headers={"Content-Type": "application/octet-stream"}
+        )
+
+        logger.info(f"DEBUG: Speech model status: {ai_response.status_code}")
+        ai_response.raise_for_status()
+
+        nova_voice = ai_response.content
+        logger.info("DEBUG: AI model returned audio")
+        logger.info(f"DEBUG: Audio bytes: {len(nova_voice)}")
+
+        # Play Nova's voice through JBL (machine running this backend)
+        audio = np.frombuffer(nova_voice, dtype=np.int16)
+        sd.play(audio, 24000)
+        sd.wait()
+
+        logger.info("DEBUG: Played Nova's voice through JBL")
+        logger.info("--------------------------------------------------")
+
+        return {"status": "ok", "presence": presence}
+
+    except Exception as e:
+        logger.error("DEBUG: Audio pipeline error!")
+        logger.error(str(e))
+        logger.info("--------------------------------------------------")
+        return {"status": "error", "message": str(e)}
 
 
 # -------------------------------------------------
