@@ -4,6 +4,50 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 # -------------------------------------------------
+# Autonomous Memory System (Level 1)
+# -------------------------------------------------
+conversation_history = []   # short-term memory
+memory = {}                 # long-term autonomous memory
+
+def update_memory(user_text):
+    text = user_text.lower()
+
+    # Pattern: "my X is Y"
+    if "my " in text and " is " in text:
+        try:
+            key = text.split("my ")[1].split(" is ")[0].strip()
+            value = text.split(" is ")[1].strip()
+            key = key.replace(" ", "_")
+            memory[key] = value
+        except:
+            pass
+
+    # Pattern: "i like X"
+    if "i like " in text:
+        try:
+            value = text.split("i like ")[1].strip()
+            memory["likes_" + value.replace(" ", "_")] = True
+        except:
+            pass
+
+    # Pattern: "i prefer X"
+    if "i prefer " in text:
+        try:
+            value = text.split("i prefer ")[1].strip()
+            memory["preference"] = value
+        except:
+            pass
+
+    # Pattern: "my dog's name is X"
+    if "my dog's name is" in text:
+        try:
+            name = text.split("my dog's name is")[1].strip()
+            memory["dog_name"] = name
+        except:
+            pass
+
+
+# -------------------------------------------------
 # FastAPI App Setup
 # -------------------------------------------------
 app = FastAPI()
@@ -27,7 +71,7 @@ ELEVEN_VOICE_ID = os.getenv("ELEVEN_VOICE_ID")
 
 
 # -------------------------------------------------
-# Nova Personality Prompt
+# Nova Personality Prompt (UNCHANGED)
 # -------------------------------------------------
 NOVA_PROMPT = """
 You are Nova — Danny’s Smart Room AI assistant. Your personality is feminine, modern, warm, and lightly playful. You speak in short, confident sentences with a clean, natural tone. You use light slang when appropriate (“got you”, “on it”, “bet”, “locked in”, “you’re good”). You avoid sounding robotic or overly formal.
@@ -94,7 +138,7 @@ Your job:
 async def speech_endpoint(request: Request):
     raw_audio = await request.body()
 
-    # 1. Speech-to-text (Groq Whisper)
+    # Speech-to-text
     stt_response = requests.post(
         "https://api.groq.com/openai/v1/audio/transcriptions",
         headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
@@ -105,39 +149,41 @@ async def speech_endpoint(request: Request):
     stt_response.raise_for_status()
     stt_text = stt_response.json().get("text", "")
 
-    # 2. Nova brain (Groq LLM)
+    # Update autonomous memory
+    update_memory(stt_text)
+    memory_text = f"Known facts: {memory}"
+
+    # Build messages with memory + history
+    messages = [
+        {"role": "system", "content": NOVA_PROMPT + "\n" + memory_text},
+        *conversation_history,
+        {"role": "user", "content": stt_text}
+    ]
+
+    # Nova brain
     nova_response = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
-        json={
-            "model": GROQ_MODEL,
-            "messages": [
-                {"role": "system", "content": NOVA_PROMPT},
-                {"role": "user", "content": stt_text}
-            ]
-        },
+        json={"model": GROQ_MODEL, "messages": messages},
         timeout=30
     )
     nova_response.raise_for_status()
     nova_reply = nova_response.json()["choices"][0]["message"]["content"]
 
-    # 3. ElevenLabs TTS
+    # Update conversation history
+    conversation_history.append({"role": "user", "content": stt_text})
+    conversation_history.append({"role": "assistant", "content": nova_reply})
+
+    # ElevenLabs TTS
     tts_url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVEN_VOICE_ID}"
-    headers = {
-        "xi-api-key": ELEVEN_API_KEY,
-        "Content-Type": "application/json"
-    }
+    headers = {"xi-api-key": ELEVEN_API_KEY, "Content-Type": "application/json"}
     payload = {
         "text": nova_reply,
         "model_id": "eleven_multilingual_v2",
-        "voice_settings": {
-            "stability": 0.4,
-            "similarity_boost": 0.8
-        }
+        "voice_settings": {"stability": 0.4, "similarity_boost": 0.8}
     }
 
     audio_bytes = requests.post(tts_url, headers=headers, json=payload, timeout=60).content
-
     return Response(content=audio_bytes, media_type="audio/wav")
 
 
@@ -149,24 +195,31 @@ async def nova_route(request: Request):
     data = await request.json()
     user_text = data.get("text", "")
 
+    update_memory(user_text)
+    memory_text = f"Known facts: {memory}"
+
+    messages = [
+        {"role": "system", "content": NOVA_PROMPT + "\n" + memory_text},
+        *conversation_history,
+        {"role": "user", "content": user_text}
+    ]
+
     response = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
-        json={
-            "model": GROQ_MODEL,
-            "messages": [
-                {"role": "system", "content": NOVA_PROMPT},
-                {"role": "user", "content": user_text}
-            ]
-        }
+        json={"model": GROQ_MODEL, "messages": messages}
     )
 
     ai_text = response.json()["choices"][0]["message"]["content"]
+
+    conversation_history.append({"role": "user", "content": user_text})
+    conversation_history.append({"role": "assistant", "content": ai_text})
+
     return {"response": ai_text}
 
 
 # -------------------------------------------------
-# 3. ElevenLabs Direct TTS Endpoint (text → audio)
+# 3. ElevenLabs Direct TTS Endpoint
 # -------------------------------------------------
 @app.post("/nova/speak")
 async def nova_speak(request: Request):
@@ -174,21 +227,14 @@ async def nova_speak(request: Request):
     text = data.get("text", "")
 
     tts_url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVEN_VOICE_ID}"
-    headers = {
-        "xi-api-key": ELEVEN_API_KEY,
-        "Content-Type": "application/json"
-    }
+    headers = {"xi-api-key": ELEVEN_API_KEY, "Content-Type": "application/json"}
     payload = {
         "text": text,
         "model_id": "eleven_multilingual_v2",
-        "voice_settings": {
-            "stability": 0.4,
-            "similarity_boost": 0.8
-        }
+        "voice_settings": {"stability": 0.4, "similarity_boost": 0.8}
     }
 
     audio_bytes = requests.post(tts_url, headers=headers, json=payload).content
-
     return Response(content=audio_bytes, media_type="audio/wav")
 
 
