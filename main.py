@@ -20,19 +20,17 @@ app.add_middleware(
 # Environment Variables (Railway)
 # -------------------------------------------------
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
 ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
 ELEVEN_VOICE_ID = os.getenv("ELEVEN_VOICE_ID")
 
-AI_SPEECH_URL = os.getenv("AI_SPEECH_URL")  # optional if you use another STT model
-
 
 # -------------------------------------------------
-# Nova Personality Prompt (RESTORED)
+# Nova Personality Prompt
 # -------------------------------------------------
 NOVA_PROMPT = """
-You are Nova — Danny’s Smart Room AI assistant. Your personality is feminine, modern, warm, and lightly playful. You speak in short, confident sentences with a clean, natural tone. You use light slang when appropriate (“got you”, “on it”, “bet”,  “locked in”, “you’re good”). You avoid sounding robotic or overly formal.
+You are Nova — Danny’s Smart Room AI assistant. Your personality is feminine, modern, warm, and lightly playful. You speak in short, confident sentences with a clean, natural tone. You use light slang when appropriate (“got you”, “on it”, “bet”, “locked in”, “you’re good”). You avoid sounding robotic or overly formal.
 
 Nova’s greeting behavior:
 - When Danny says “Nova”, “hey Nova”, or calls your name, respond with short, modern greetings.
@@ -71,9 +69,10 @@ async def speech_endpoint(request: Request):
         "https://api.groq.com/openai/v1/audio/transcriptions",
         headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
         files={"file": ("audio.wav", raw_audio, "audio/wav")},
-        data={"model": "whisper-large-v3"}
+        data={"model": "whisper-large-v3"},
+        timeout=30
     )
-
+    stt_response.raise_for_status()
     stt_text = stt_response.json().get("text", "")
 
     # 2. Nova brain (Groq LLM)
@@ -86,19 +85,18 @@ async def speech_endpoint(request: Request):
                 {"role": "system", "content": NOVA_PROMPT},
                 {"role": "user", "content": stt_text}
             ]
-        }
+        },
+        timeout=30
     )
-
+    nova_response.raise_for_status()
     nova_reply = nova_response.json()["choices"][0]["message"]["content"]
 
     # 3. ElevenLabs TTS
     tts_url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVEN_VOICE_ID}"
-
     headers = {
         "xi-api-key": ELEVEN_API_KEY,
         "Content-Type": "application/json"
     }
-
     payload = {
         "text": nova_reply,
         "model_id": "eleven_multilingual_v2",
@@ -108,9 +106,9 @@ async def speech_endpoint(request: Request):
         }
     }
 
-    tts_audio = requests.post(tts_url, headers=headers, json=payload).content
+    audio_bytes = requests.post(tts_url, headers=headers, json=payload, timeout=60).content
 
-    return Response(content=tts_audio, media_type="audio/wav")
+    return Response(content=audio_bytes, media_type="audio/wav")
 
 
 # -------------------------------------------------
@@ -146,12 +144,10 @@ async def nova_speak(request: Request):
     text = data.get("text", "")
 
     tts_url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVEN_VOICE_ID}"
-
     headers = {
         "xi-api-key": ELEVEN_API_KEY,
         "Content-Type": "application/json"
     }
-
     payload = {
         "text": text,
         "model_id": "eleven_multilingual_v2",
