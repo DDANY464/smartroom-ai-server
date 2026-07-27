@@ -189,6 +189,14 @@ async def speech_endpoint(request: Request):
     audio_bytes = requests.post(tts_url, headers=headers, json=payload, timeout=60).content
     return Response(content=audio_bytes, media_type="audio/wav")
 
+@app.get("/debug/env")
+def debug_env():
+    return {
+        "ELEVEN_API_KEY": ELEVEN_API_KEY,
+        "ELEVEN_VOICE_ID": ELEVEN_VOICE_ID,
+        "GROQ_API_KEY": GROQ_API_KEY,
+        "GROQ_MODEL": GROQ_MODEL
+    }
 
 # -------------------------------------------------
 # 2. Nova Text Endpoint (no audio)
