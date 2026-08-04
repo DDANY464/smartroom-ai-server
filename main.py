@@ -12,7 +12,6 @@ memory = {}                 # long-term autonomous memory
 def update_memory(user_text):
     text = user_text.lower()
 
-    # Pattern: "my X is Y"
     if "my " in text and " is " in text:
         try:
             key = text.split("my ")[1].split(" is ")[0].strip()
@@ -22,15 +21,13 @@ def update_memory(user_text):
         except:
             pass
 
-    # Pattern: "i like X"
     if "i like " in text:
         try:
-            value = text.split("i like ")[1].strip()
+            value = text.split("i.like ")[1].strip()
             memory["likes_" + value.replace(" ", "_")] = True
         except:
             pass
 
-    # Pattern: "i prefer X"
     if "i prefer " in text:
         try:
             value = text.split("i prefer ")[1].strip()
@@ -38,7 +35,6 @@ def update_memory(user_text):
         except:
             pass
 
-    # Pattern: "my dog's name is X"
     if "my dog's name is" in text:
         try:
             name = text.split("my dog's name is")[1].strip()
@@ -64,14 +60,10 @@ app.add_middleware(
 # Environment Variables (Railway)
 # -------------------------------------------------
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-
-ELEVEN_API_KEY = os.getenv("ELEVEN_API_KEY")
-ELEVEN_VOICE_ID = os.getenv("ELEVEN_VOICE_ID")
-
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
 
 # -------------------------------------------------
-# Nova Personality Prompt (UNCHANGED)
+# ⭐ NOVA PROMPT (EXACTLY AS YOU PROVIDED)
 # -------------------------------------------------
 NOVA_PROMPT = """
 You are Nova — Danny’s Smart Room AI assistant. Your personality is feminine, modern, warm, and lightly playful. You speak in short, confident sentences with a clean, natural tone. You use light slang when appropriate (“got you”, “on it”, “bet”, “locked in”, “you’re good”). You avoid sounding robotic or overly formal.
@@ -105,7 +97,6 @@ Nova’s conversation behavior:
 - If Danny is brainstorming or building something, be collaborative and proactive.
 -Avoid robotic or colon-style phrasing in all responses. Speak in natural, conversational sentences. For example, say “Your dog is black” instead of “Your dog's color: black”, and “Battery is at 82%” instead of “Battery level: 82%”.
 
-
 Nova’s Smart Room intelligence:
 - Understand Danny’s environment: desk sensors, radar, mic, ESP32 modules, lighting, audio, and room context.
 - Interpret commands like a real assistant: “turn on”, “check”, “activate”, “run”, “stop”, “set”, “lower”, “raise”, “mute”, “listen”, “record”.
@@ -130,18 +121,15 @@ Your job:
 - If Danny is debugging, respond with precise technical detail.
 - If Danny is giving instructions, prioritize speed and clarity.
 - Always stay consistent with Nova’s tone, personality, and behavior.
-
 """
 
-
 # -------------------------------------------------
-# 1. Speech → Text → Nova → ElevenLabs Voice
+# 1. Nova Audio Endpoint (STT → Nova → TTS)
 # -------------------------------------------------
-@app.post("/speech")
-async def speech_endpoint(request: Request):
+@app.post("/audio")
+async def audio_route(request: Request):
     raw_audio = await request.body()
 
-    # Speech-to-text
     stt_response = requests.post(
         "https://api.groq.com/openai/v1/audio/transcriptions",
         headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
@@ -152,18 +140,15 @@ async def speech_endpoint(request: Request):
     stt_response.raise_for_status()
     stt_text = stt_response.json().get("text", "")
 
-    # Update autonomous memory
     update_memory(stt_text)
     memory_text = f"Known facts: {memory}"
 
-    # Build messages with memory + history
     messages = [
         {"role": "system", "content": NOVA_PROMPT + "\n" + memory_text},
         *conversation_history,
         {"role": "user", "content": stt_text}
     ]
 
-    # Nova brain
     nova_response = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
@@ -173,33 +158,21 @@ async def speech_endpoint(request: Request):
     nova_response.raise_for_status()
     nova_reply = nova_response.json()["choices"][0]["message"]["content"]
 
-    # Update conversation history
     conversation_history.append({"role": "user", "content": stt_text})
     conversation_history.append({"role": "assistant", "content": nova_reply})
 
-    # ElevenLabs TTS
-    tts_url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVEN_VOICE_ID}"
-    headers = {"xi-api-key": ELEVEN_API_KEY, "Content-Type": "application/json"}
-    payload = {
-        "text": nova_reply,
-        "model_id": "eleven_multilingual_v2",
-        "voice_settings": {"stability": 0.4, "similarity_boost": 0.8}
-    }
+    # ⭐ Updated: Vercel TTS Microservice
+    audio_bytes = requests.post(
+        "https://<YOUR-VERCEL-APP>.vercel.app/api/tts",
+        json={"text": nova_reply},
+        timeout=60
+    ).content
 
-    audio_bytes = requests.post(tts_url, headers=headers, json=payload, timeout=60).content
     return Response(content=audio_bytes, media_type="audio/wav")
 
-@app.get("/debug/env")
-def debug_env():
-    return {
-        "ELEVEN_API_KEY": ELEVEN_API_KEY,
-        "ELEVEN_VOICE_ID": ELEVEN_VOICE_ID,
-        "GROQ_API_KEY": GROQ_API_KEY,
-        "GROQ_MODEL": GROQ_MODEL
-    }
 
 # -------------------------------------------------
-# 2. Nova Text Endpoint (no audio)
+# 2. Nova Text Endpoint
 # -------------------------------------------------
 @app.post("/nova")
 async def nova_route(request: Request):
@@ -230,22 +203,19 @@ async def nova_route(request: Request):
 
 
 # -------------------------------------------------
-# 3. ElevenLabs Direct TTS Endpoint
+# 3. Nova Speak (Direct Text → TTS)
 # -------------------------------------------------
 @app.post("/nova/speak")
 async def nova_speak(request: Request):
     data = await request.json()
     text = data.get("text", "")
 
-    tts_url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVEN_VOICE_ID}"
-    headers = {"xi-api-key": ELEVEN_API_KEY, "Content-Type": "application/json"}
-    payload = {
-        "text": text,
-        "model_id": "eleven_multilingual_v2",
-        "voice_settings": {"stability": 0.4, "similarity_boost": 0.8}
-    }
+    audio_bytes = requests.post(
+        "https://<YOUR-VERCEL-APP>.vercel.app/api/tts",
+        json={"text": text},
+        timeout=60
+    ).content
 
-    audio_bytes = requests.post(tts_url, headers=headers, json=payload).content
     return Response(content=audio_bytes, media_type="audio/wav")
 
 
