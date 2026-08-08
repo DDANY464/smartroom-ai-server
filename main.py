@@ -77,7 +77,13 @@ def debug_eleven():
         "api_key_preview": key[:6] if key else "NONE",
         "voice_id": VOICE_ID
     }
-
+@app.get("/debug-eleven-full")
+def debug_eleven_full():
+    key = os.getenv("ELEVENLABS_API_KEY")
+    return {
+        "raw_key": key,
+        "length": len(key) if key else 0
+    }
 
 # -------------------------------------------------
 # ElevenLabs TTS Function (Corrected)
