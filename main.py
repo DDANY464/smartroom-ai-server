@@ -62,6 +62,34 @@ app.add_middleware(
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
 
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")  # Replace with your voice ID
+
+# -------------------------------------------------
+# ElevenLabs TTS Function
+# -------------------------------------------------
+def elevenlabs_tts(text):
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}/stream"
+
+    headers = {
+        "xi-api-key": ELEVENLABS_API_KEY,
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "text": text,
+        "model_id": "eleven_monolingual_v1",
+        "voice_settings": {
+            "stability": 0.4,
+            "similarity_boost": 0.8
+        }
+    }
+
+    response = requests.post(url, json=payload, headers=headers, timeout=60)
+    response.raise_for_status()
+    return response.content
+
+
 # -------------------------------------------------
 # ⭐ NOVA PROMPT (EXACTLY AS YOU PROVIDED — UNCHANGED)
 # -------------------------------------------------
@@ -124,7 +152,7 @@ Your job:
 """
 
 # -------------------------------------------------
-# HEALTH CHECK (Required for Render)
+# Health Check (Required for Render)
 # -------------------------------------------------
 @app.get("/health")
 def health():
@@ -169,13 +197,9 @@ async def audio_route(request: Request):
     conversation_history.append({"role": "user", "content": stt_text})
     conversation_history.append({"role": "assistant", "content": nova_reply})
 
-    audio_bytes = requests.post(
-        "https://<YOUR-VERCEL-APP>.vercel.app/api/tts",
-        json={"text": nova_reply},
-        timeout=60
-    ).content
+    audio_bytes = elevenlabs_tts(nova_reply)
 
-    return Response(content=audio_bytes, media_type="audio/wav")
+    return Response(content=audio_bytes, media_type="audio/mpeg")
 
 
 # -------------------------------------------------
@@ -218,13 +242,9 @@ async def nova_speak(request: Request):
     data = await request.json()
     text = data.get("text", "")
 
-    audio_bytes = requests.post(
-        "https://<YOUR-VERCEL-APP>.vercel.app/api/tts",
-        json={"text": text},
-        timeout=60
-    ).content
+    audio_bytes = elevenlabs_tts(text)
 
-    return Response(content=audio_bytes, media_type="audio/wav")
+    return Response(content=audio_bytes, media_type="audio/mpeg")
 
 
 # -------------------------------------------------
