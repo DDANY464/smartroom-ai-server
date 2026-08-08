@@ -77,7 +77,7 @@ def elevenlabs_tts(text):
     }
 
     payload = {
-        "model_id": "eleven_v3",
+        "model_id": "eleven_monolingual_v1",   # v1 MODEL (FREE)
         "text": text
     }
 
