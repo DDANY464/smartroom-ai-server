@@ -71,6 +71,7 @@ VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")  # Replace w
 
 @app.get("/debug-eleven")
 def debug_eleven():
+    key = os.getenv("ELEVENLABS_API_KEY")
     return {
         "api_key_is_none": ELEVENLABS_API_KEY is None,
         "api_key_length": len(ELEVENLABS_API_KEY) if ELEVENLABS_API_KEY else 0,
