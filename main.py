@@ -8,7 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 # -------------------------------------------------
 conversation_history = []   # short-term memory
 memory = {}                 # long-term autonomous memory
-
+@app.get("/debug-eleven")
+def debug_eleven():
+    return {
+        "api_key_is_none": ELEVENLABS_API_KEY is None,
+        "api_key_length": len(ELEVENLABS_API_KEY) if ELEVENLABS_API_KEY else 0,
+        "api_key_preview": ELEVENLABS_API_KEY[:6] if ELEVENLABS_API_KEY else "NONE",
+        "voice_id": VOICE_ID
+    }
 def update_memory(user_text):
     text = user_text.lower()
 
