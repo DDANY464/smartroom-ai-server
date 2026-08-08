@@ -69,7 +69,6 @@ VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")  # Replace w
 # ElevenLabs TTS Function
 # -------------------------------------------------
 def elevenlabs_tts(text):
-    def elevenlabs_tts(text):
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}"
 
     headers = {
@@ -88,8 +87,6 @@ def elevenlabs_tts(text):
 
     response = requests.post(url, json=payload, headers=headers, timeout=60)
     response.raise_for_status()
-    return response.content
-
     return response.content
 
 
