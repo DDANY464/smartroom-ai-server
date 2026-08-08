@@ -23,7 +23,7 @@ def update_memory(user_text):
 
     if "i like " in text:
         try:
-            value = text.split("i.like ")[1].strip()
+            value = text.split("i like ")[1].strip()
             memory["likes_" + value.replace(" ", "_")] = True
         except:
             pass
@@ -57,13 +57,13 @@ app.add_middleware(
 )
 
 # -------------------------------------------------
-# Environment Variables (Railway)
+# Environment Variables (Render)
 # -------------------------------------------------
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
 
 # -------------------------------------------------
-# ⭐ NOVA PROMPT (EXACTLY AS YOU PROVIDED)
+# ⭐ NOVA PROMPT (EXACTLY AS YOU PROVIDED — UNCHANGED)
 # -------------------------------------------------
 NOVA_PROMPT = """
 You are Nova — Danny’s Smart Room AI assistant. Your personality is feminine, modern, warm, and lightly playful. You speak in short, confident sentences with a clean, natural tone. You use light slang when appropriate (“got you”, “on it”, “bet”, “locked in”, “you’re good”). You avoid sounding robotic or overly formal.
@@ -124,6 +124,14 @@ Your job:
 """
 
 # -------------------------------------------------
+# HEALTH CHECK (Required for Render)
+# -------------------------------------------------
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+# -------------------------------------------------
 # 1. Nova Audio Endpoint (STT → Nova → TTS)
 # -------------------------------------------------
 @app.post("/audio")
@@ -135,7 +143,7 @@ async def audio_route(request: Request):
         headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
         files={"file": ("audio.wav", raw_audio, "audio/wav")},
         data={"model": "whisper-large-v3"},
-        timeout=30
+        timeout=60
     )
     stt_response.raise_for_status()
     stt_text = stt_response.json().get("text", "")
@@ -153,7 +161,7 @@ async def audio_route(request: Request):
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
         json={"model": GROQ_MODEL, "messages": messages},
-        timeout=30
+        timeout=60
     )
     nova_response.raise_for_status()
     nova_reply = nova_response.json()["choices"][0]["message"]["content"]
@@ -161,7 +169,6 @@ async def audio_route(request: Request):
     conversation_history.append({"role": "user", "content": stt_text})
     conversation_history.append({"role": "assistant", "content": nova_reply})
 
-    # ⭐ Updated: Vercel TTS Microservice
     audio_bytes = requests.post(
         "https://<YOUR-VERCEL-APP>.vercel.app/api/tts",
         json={"text": nova_reply},
@@ -191,7 +198,8 @@ async def nova_route(request: Request):
     response = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
-        json={"model": GROQ_MODEL, "messages": messages}
+        json={"model": GROQ_MODEL, "messages": messages},
+        timeout=60
     )
 
     ai_text = response.json()["choices"][0]["message"]["content"]
@@ -220,7 +228,7 @@ async def nova_speak(request: Request):
 
 
 # -------------------------------------------------
-# 4. Railway Port Binding
+# Render Port Binding
 # -------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
