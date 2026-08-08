@@ -1,5 +1,4 @@
 fastapi
-uvicorn[standard]
+uvicorn
 requests
-python-multipart
-numpy
+python-dotenv
