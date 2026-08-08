@@ -73,9 +73,9 @@ VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")  # Replace w
 def debug_eleven():
     key = os.getenv("ELEVENLABS_API_KEY")
     return {
-        "api_key_is_none": ELEVENLABS_API_KEY is None,
-        "api_key_length": len(ELEVENLABS_API_KEY) if ELEVENLABS_API_KEY else 0,
-        "api_key_preview": ELEVENLABS_API_KEY[:6] if ELEVENLABS_API_KEY else "NONE",
+        "api_key_is_none": key is None,
+        "api_key_length": len(key) if key else 0,
+        "api_key_preview": key[:6] if key else "NONE",
         "voice_id": VOICE_ID
     }
 def elevenlabs_tts(text):
