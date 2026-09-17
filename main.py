@@ -207,7 +207,7 @@ async def audio_route(request: Request):
     conversation_history.append({"role": "user", "content": stt_text})
     conversation_history.append({"role": "assistant", "content": nova_reply})
 
-    audio_bytes = elevenlabs_tts(nova_reply)
+    audio_bytes = nova_tts(text)
 
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
