@@ -62,28 +62,19 @@ app.add_middleware(
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
 
-# NEW — OpenAI TTS key
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
 
 # -------------------------------------------------
-# OpenAI TTS Function (Working)
+# Google Translate TTS (FREE)
 # -------------------------------------------------
 def nova_tts(text):
-    url = "https://api.openai.com/v1/audio/speech"
-
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json"
+    url = "https://translate.google.com/translate_tts"
+    params = {
+        "ie": "UTF-8",
+        "q": text,
+        "tl": "en",
+        "client": "tw-ob"
     }
-
-    payload = {
-        "model": "gpt-4o-mini-tts",
-        "voice": "alloy",
-        "input": text
-    }
-
-    response = requests.post(url, headers=headers, json=payload)
+    response = requests.get(url, params=params)
     response.raise_for_status()
     return response.content
 
