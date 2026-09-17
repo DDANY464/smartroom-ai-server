@@ -1,4 +1,4 @@
-import os 
+import os
 import requests
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -62,31 +62,12 @@ app.add_middleware(
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
 
-VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
+# NEW — OpenAI TTS key
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
 # -------------------------------------------------
-# ElevenLabs Debug Endpoint (Corrected)
-# -------------------------------------------------
-@app.get("/debug-eleven")
-def debug_eleven():
-    key = os.getenv("ELEVENLABS_API_KEY")  # load at runtime
-    return {
-        "api_key_is_none": key is None,
-        "api_key_length": len(key) if key else 0,
-        "api_key_preview": key[:6] if key else "NONE",
-        "voice_id": VOICE_ID
-    }
-@app.get("/debug-eleven-full")
-def debug_eleven_full():
-    key = os.getenv("ELEVENLABS_API_KEY")
-    return {
-        "raw_key": key,
-        "length": len(key) if key else 0
-    }
-
-# -------------------------------------------------
-# ElevenLabs TTS Function (Corrected)
+# OpenAI TTS Function (Working)
 # -------------------------------------------------
 def nova_tts(text):
     url = "https://api.openai.com/v1/audio/speech"
@@ -207,7 +188,7 @@ async def audio_route(request: Request):
     conversation_history.append({"role": "user", "content": stt_text})
     conversation_history.append({"role": "assistant", "content": nova_reply})
 
-    audio_bytes = nova_tts(text)
+    audio_bytes = nova_tts(nova_reply)
 
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
@@ -252,7 +233,7 @@ async def nova_speak(request: Request):
     data = await request.json()
     text = data.get("text", "")
 
-    audio_bytes = elevenlabs_tts(text)
+    audio_bytes = nova_tts(text)
 
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
@@ -264,4 +245,3 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8080))
     uvicorn.run("main:app", host="0.0.0.0", port=port)
-
