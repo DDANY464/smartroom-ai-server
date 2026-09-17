@@ -1,7 +1,4 @@
 fastapi
 uvicorn
 requests
-python-dotenv
-piper-tts
-numpy
-soundfile
+python-multipart
