@@ -93,10 +93,11 @@ def elevenlabs_tts(text):
 
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}"
 
-    headers = {
-        "xi-api-key": api_key,
-        "Content-Type": "application/json"
-    }
+   headers = {
+    "Authorization": f"Bearer {ELEVENLABS_API_KEY}",
+    "Content-Type": "application/json"
+}
+
 
     payload = {
         "model_id": "eleven_multilingual_v2",
