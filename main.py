@@ -88,27 +88,21 @@ def debug_eleven_full():
 # -------------------------------------------------
 # ElevenLabs TTS Function (Corrected)
 # -------------------------------------------------
-def elevenlabs_tts(text):
-    api_key = os.getenv("ELEVENLABS_API_KEY")  # load at runtime
-
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}"
+def nova_tts(text):
+    url = "https://api.openai.com/v1/audio/speech"
 
     headers = {
-    "Authorization": f"Bearer {api_key}",
-    "Content-Type": "application/json"
-}
-
-
-    payload = {
-        "model_id": "eleven_multilingual_v2",
-        "text": text,
-        "voice_settings": {
-            "stability": 0.5,
-            "similarity_boost": 0.8
-        }
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
     }
 
-    response = requests.post(url, json=payload, headers=headers)
+    payload = {
+        "model": "gpt-4o-mini-tts",
+        "voice": "alloy",
+        "input": text
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
     return response.content
 
