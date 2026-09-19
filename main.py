@@ -82,7 +82,14 @@ def nova_tts(text):
         "voice_settings": '{"stability":0.3,"similarity_boost":0.7}'
     }
 
-    response = requests.post(url, headers=headers, data=data, stream=True)
+    # ElevenLabs requires multipart/form-data
+    files = {
+        "text": (None, text),
+        "model_id": (None, "eleven_multilingual_v2"),
+        "voice_settings": (None, '{"stability":0.3,"similarity_boost":0.7}')
+    }
+
+    response = requests.post(url, headers=headers, files=files, stream=True)
 
     if response.status_code != 200:
         print("ELEVENLABS ERROR:", response.status_code, response.text)
