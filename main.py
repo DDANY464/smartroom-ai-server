@@ -77,11 +77,10 @@ def nova_tts(text):
     }
 
     data = {
-    "text": text,
-    "model_id": "eleven_multilingual_v2",
-    "voice_settings": '{"stability":0.3,"similarity_boost":0.7}'
-}
-
+        "text": text,
+        "model_id": "eleven_multilingual_v2",
+        "voice_settings": '{"stability":0.3,"similarity_boost":0.7}'
+    }
 
     response = requests.post(url, headers=headers, data=data, stream=True)
 
@@ -90,6 +89,7 @@ def nova_tts(text):
         return None
 
     return b"".join(response.iter_content(chunk_size=1024))
+
 
 
 # -------------------------------------------------
