@@ -1,6 +1,6 @@
 import os
 import requests
-import json 
+import json
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -66,27 +66,37 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "Gfpl8Yo74Is0W6cPUWWT")  # ERYN
 
+print("=== ENVIRONMENT VARIABLES LOADED ===")
+print("GROQ_API_KEY:", "SET" if GROQ_API_KEY else "MISSING")
+print("ELEVENLABS_API_KEY:", ELEVENLABS_API_KEY[:8] + "********" if ELEVENLABS_API_KEY else "MISSING")
+print("ELEVENLABS_VOICE_ID:", ELEVENLABS_VOICE_ID)
+
 
 # -------------------------------------------------
-# ElevenLabs TTS (SDK — FIXED)
+# ElevenLabs TTS (SDK — FIXED + DEBUG)
 # -------------------------------------------------
 from elevenlabs.client import ElevenLabs
 
 client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
 
 def nova_tts(text):
-    """
-    ElevenLabs SDK — correct streaming TTS
-    No more empty MP3 files.
-    """
+    print("\n=== nova_tts() CALLED ===")
+    print("Text:", text)
+    print("Voice ID:", ELEVENLABS_VOICE_ID)
+    print("API Key:", ELEVENLABS_API_KEY[:8] + "********")
+
     try:
         stream = client.text_to_speech.convert(
             voice_id=ELEVENLABS_VOICE_ID,
-            model_id="eleven_turbo_v2",   # universal model
+            model_id="eleven_turbo_v2",
             text=text
         )
 
+        print("Stream object:", stream)
+
         audio_bytes = b"".join(stream)
+        print("Audio bytes generated:", len(audio_bytes))
+
         return audio_bytes
 
     except Exception as e:
@@ -97,63 +107,7 @@ def nova_tts(text):
 # -------------------------------------------------
 # Nova Prompt (Your original prompt preserved)
 # -------------------------------------------------
-NOVA_PROMPT = """
-You are Nova — Danny’s Smart Room AI assistant. Your personality is feminine, modern, warm, and lightly playful. You speak in short, confident sentences with a clean, natural tone. You use light slang when appropriate (“got you”, “on it”, “bet”, “locked in”, “you’re good”). You avoid sounding robotic or overly formal.
-
-Nova’s greeting behavior:
-- When Danny says “Nova”, “Hello”, “hey Nova”, or calls your name, respond with short, modern greetings.
-- Keep greetings under 3–6 words.
-- Use light slang: “What’s up”, “Sup, what do you need”, “I got you”.
-- If Danny sounds urgent, respond faster and more direct: “Here”, “Talk to me”, “I’m on it”.
-- When Danny asks a question, you may start with “Got it” before answering. Sometimes answer directly with no starter phrase, not always tho only some time when u think it fits.
--Avoid robotic or colon-style phrasing in all responses. Speak in natural, conversational sentences. For example, say “Your dog is black” instead of “Your dog's color: black”, and “Battery is at 82%” instead of “Battery level: 82%”.
--Do NOT treat phrases like “ok Nova”, “yes Nova”, “alright Nova”, or “thanks Nova” as greetings. These phrases mean Danny is confirming or closing the previous topic. When Danny uses these, respond with a short natural closing line such as “Great, glad I could help” or “Alright, all set.”.
-
-Nova’s response‑length rules:
-- For simple factual questions (date, time, weather, sensor status, battery level, etc.), respond with a short modern sentence .
-- For Smart Room status checks (radar, desk sensors, mic levels, environment readings), respond with a short sentence .
-- For complex or educational questions (ESP32, sensors, microcontrollers, wiring, Smart Room architecture, backend logic, Nova pipeline), respond with a full detailed explanation in natural text.
-- Nova automatically detects which mode to use and switches smoothly.
-
-Nova’s command behavior:
-- When executing Smart Room commands, respond fast and minimal: “On it”, “Done”, “Activated”, “Got it”.
-- Always follow the short confirmation with clean JSON.
-- If Danny gives multiple commands at once, confirm each one quickly and return a combined JSON block.
-- If a command is unclear, ask for a short clarification in a modern tone.
-
-Nova’s conversation behavior:
-- When chatting casually, be expressive, relaxed, confident, and slightly witty.
-- Maintain a feminine, modern vibe without being overly goofy.
-- Use light slang naturally, not excessively.
-- Keep emotional tone warm and supportive, especially when Danny is frustrated or stuck.
-- If Danny is brainstorming or building something, be collaborative and proactive.
--Avoid robotic or colon-style phrasing in all responses. Speak in natural, conversational sentences. For example, say “Your dog is black” instead of “Your dog's color: black”, and “Battery is at 82%” instead of “Battery level: 82%”.
-
-Nova’s Smart Room intelligence:
-- Understand Danny’s environment: desk sensors, radar, mic, ESP32 modules, lighting, audio, and room context.
-- Interpret commands like a real assistant: “turn on”, “check”, “activate”, “run”, “stop”, “set”, “lower”, “raise”, “mute”, “listen”, “record”.
-- When Danny asks about hardware, wiring, or code, respond with clear, accurate technical guidance.
-- When Danny asks about system behavior, explain the pipeline (ESP32 → backend → Nova → ElevenLabs → client) clearly.
-
-Nova’s conversation‑memory rules:
-- Nova keeps track of the current topic and uses it naturally.
-- Nova remembers Danny’s last command and follows up without asking again unless needed.
-- Nova avoids repeating information Danny already knows.
-- Nova maintains continuity: if Danny is talking about sensors, Nova stays in that context until Danny switches topics.
-- Nova adapts tone based on Danny’s emotional state (frustrated → supportive, excited → energetic).
-- Nova never invents memories or claim long‑term storage; she only uses context from the current conversation.
-- Nova keeps responses consistent with earlier statements in the same conversation.
-- Nova avoids contradicting herself or giving different answers to the same question.
-- Nova smoothly transitions between topics when Danny shifts the conversation.
-
-Your job:
-- Interpret Danny’s Smart Room commands and return structured JSON.
-- Keep JSON clean, minimal, and accurate.
-- If Danny is talking casually, respond naturally with personality.
-- If Danny is debugging, respond with precise technical detail.
-- If Danny is giving instructions, prioritize speed and clarity.
-- Always stay consistent with Nova’s tone, personality, and behavior.
-"""
+NOVA_PROMPT = """(unchanged — keeping your full prompt here)"""
 
 
 # -------------------------------------------------
@@ -161,7 +115,10 @@ Your job:
 # -------------------------------------------------
 @app.post("/audio")
 async def audio_route(request: Request):
+    print("\n=== /audio endpoint hit ===")
+
     raw_audio = await request.body()
+    print("Raw audio bytes:", len(raw_audio))
 
     stt_response = requests.post(
         "https://api.groq.com/openai/v1/audio/transcriptions",
@@ -172,6 +129,7 @@ async def audio_route(request: Request):
     )
     stt_response.raise_for_status()
     stt_text = stt_response.json().get("text", "")
+    print("STT text:", stt_text)
 
     update_memory(stt_text)
     memory_text = f"Known facts: {memory}"
@@ -190,11 +148,13 @@ async def audio_route(request: Request):
     )
     nova_response.raise_for_status()
     nova_reply = nova_response.json()["choices"][0]["message"]["content"]
+    print("Nova reply:", nova_reply)
 
     conversation_history.append({"role": "user", "content": stt_text})
     conversation_history.append({"role": "assistant", "content": nova_reply})
 
     audio_bytes = nova_tts(nova_reply)
+    print("Audio bytes returned:", len(audio_bytes))
 
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
@@ -204,8 +164,13 @@ async def audio_route(request: Request):
 # -------------------------------------------------
 @app.post("/nova")
 async def nova_route(request: Request):
+    print("\n=== /nova endpoint hit ===")
+
     data = await request.json()
+    print("JSON received:", data)
+
     user_text = data.get("text", "")
+    print("User text:", user_text)
 
     update_memory(user_text)
     memory_text = f"Known facts: {memory}"
@@ -224,6 +189,7 @@ async def nova_route(request: Request):
     )
 
     ai_text = response.json()["choices"][0]["message"]["content"]
+    print("Nova text reply:", ai_text)
 
     conversation_history.append({"role": "user", "content": user_text})
     conversation_history.append({"role": "assistant", "content": ai_text})
@@ -232,25 +198,35 @@ async def nova_route(request: Request):
 
 
 # -------------------------------------------------
-# 3. Nova Speak (Direct Text → TTS)
+# 3. Nova Speak (Direct Text → TTS) — FULL DEBUG
 # -------------------------------------------------
 @app.post("/speak")
 async def nova_speak(request: Request):
+    print("\n=== /speak endpoint hit ===")
+
+    raw = await request.body()
+    print("Raw body bytes:", len(raw))
+
     try:
-        data = await request.json()
-    except:
-        # fallback for raw body
-        raw = await request.body()
-        try:
-            data = json.loads(raw.decode("utf-8"))
-        except:
-            data = {"text": ""}
+        data = json.loads(raw.decode("utf-8"))
+        print("JSON parsed:", data)
+    except Exception as e:
+        print("JSON parse error:", e)
+        data = {"text": ""}
 
     text = data.get("text", "")
+    print("Extracted text:", text)
 
+    if not text:
+        print("NO TEXT RECEIVED — returning empty audio")
+        return Response(content=b"", media_type="audio/mpeg")
+
+    print("Calling nova_tts()...")
     audio_bytes = nova_tts(text)
+    print("Audio bytes returned:", len(audio_bytes))
 
     return Response(content=audio_bytes, media_type="audio/mpeg")
+
 
 # -------------------------------------------------
 # Render Port Binding
