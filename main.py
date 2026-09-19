@@ -76,13 +76,7 @@ def nova_tts(text):
         "Authorization": f"Bearer {ELEVENLABS_API_KEY}"
     }
 
-    data = {
-        "text": text,
-        "model_id": "eleven_multilingual_v2",
-        "voice_settings": '{"stability":0.3,"similarity_boost":0.7}'
-    }
-
-    # ElevenLabs requires multipart/form-data
+    # ElevenLabs requires multipart/form-data with files=
     files = {
         "text": (None, text),
         "model_id": (None, "eleven_multilingual_v2"),
@@ -96,7 +90,6 @@ def nova_tts(text):
         return None
 
     return b"".join(response.iter_content(chunk_size=1024))
-
 
 
 # -------------------------------------------------
