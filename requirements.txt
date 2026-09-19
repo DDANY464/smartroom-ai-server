@@ -2,4 +2,4 @@ fastapi
 uvicorn
 requests
 python-multipart
-elevenlabs
+elevenlabs==1.7.0
