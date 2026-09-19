@@ -235,13 +235,21 @@ async def nova_route(request: Request):
 # -------------------------------------------------
 @app.post("/nova/speak")
 async def nova_speak(request: Request):
-    data = await request.json()
+    try:
+        data = await request.json()
+    except:
+        # fallback for raw body
+        raw = await request.body()
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except:
+            data = {"text": ""}
+
     text = data.get("text", "")
 
     audio_bytes = nova_tts(text)
 
     return Response(content=audio_bytes, media_type="audio/mpeg")
-
 
 # -------------------------------------------------
 # Render Port Binding
