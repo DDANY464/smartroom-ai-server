@@ -69,27 +69,22 @@ ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
 # -------------------------------------------------
 # ElevenLabs TTS (NEW API FORMAT)
 # -------------------------------------------------
+from elevenlabs.client import ElevenLabs
+import os
+
+client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+
 def nova_tts(text):
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}/stream"
+    response = client.text_to_speech.convert(
+        voice_id=os.getenv("ELEVENLABS_VOICE_ID"),
+        model_id="eleven_turbo_v2",   # works with ALL voices
+        text=text
+    )
 
-    headers = {
-        "Authorization": f"Bearer {ELEVENLABS_API_KEY}"
-    }
+    # response is a generator of audio chunks
+    audio_bytes = b"".join(response)
+    return audio_bytes
 
-    # ElevenLabs requires multipart/form-data with files=
-    files = {
-        "text": (None, text),
-        "model_id": (None, "eleven_multilingual_v2"),
-        "voice_settings": (None, '{"stability":0.3,"similarity_boost":0.7}')
-    }
-
-    response = requests.post(url, headers=headers, files=files, stream=True)
-
-    if response.status_code != 200:
-        print("ELEVENLABS ERROR:", response.status_code, response.text)
-        return None
-
-    return b"".join(response.iter_content(chunk_size=1024))
 
 
 # -------------------------------------------------
