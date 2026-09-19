@@ -62,21 +62,30 @@ app.add_middleware(
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
 
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+
 
 # -------------------------------------------------
-# Google Translate TTS (FREE)
+# ElevenLabs TTS (NEW API FORMAT)
 # -------------------------------------------------
 def nova_tts(text):
-    url = "https://translate.google.com/translate_tts"
-    params = {
-        "ie": "UTF-8",
-        "q": text,
-        "tl": "en",
-        "client": "tw-ob"
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}/stream"
+
+    headers = {
+        "Authorization": f"Bearer {ELEVENLABS_API_KEY}"
     }
-    response = requests.get(url, params=params)
+
+    data = {
+        "text": text,
+        "model_id": "eleven_multilingual_v2",
+        "voice_settings": '{"stability":0.3,"similarity_boost":0.7}'
+    }
+
+    response = requests.post(url, headers=headers, data=data, stream=True)
     response.raise_for_status()
-    return response.content
+
+    return b"".join(response.iter_content(chunk_size=1024))
 
 
 # -------------------------------------------------
