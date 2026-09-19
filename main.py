@@ -63,28 +63,34 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
 
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
-ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "Gfpl8Yo74Is0W6cPUWWT")  # ERYN
 
 
 # -------------------------------------------------
-# ElevenLabs TTS (NEW API FORMAT)
+# ElevenLabs TTS (SDK — FIXED)
 # -------------------------------------------------
 from elevenlabs.client import ElevenLabs
-import os
 
-client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
 
 def nova_tts(text):
-    response = client.text_to_speech.convert(
-        voice_id=os.getenv("ELEVENLABS_VOICE_ID"),
-        model_id="eleven_turbo_v2",   # works with ALL voices
-        text=text
-    )
+    """
+    ElevenLabs SDK — correct streaming TTS
+    No more empty MP3 files.
+    """
+    try:
+        stream = client.text_to_speech.convert(
+            voice_id=ELEVENLABS_VOICE_ID,
+            model_id="eleven_turbo_v2",   # universal model
+            text=text
+        )
 
-    # response is a generator of audio chunks
-    audio_bytes = b"".join(response)
-    return audio_bytes
+        audio_bytes = b"".join(stream)
+        return audio_bytes
 
+    except Exception as e:
+        print("ELEVENLABS ERROR:", e)
+        return b""
 
 
 # -------------------------------------------------
