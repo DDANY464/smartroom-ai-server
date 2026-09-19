@@ -234,7 +234,7 @@ async def nova_route(request: Request):
 # -------------------------------------------------
 # 3. Nova Speak (Direct Text → TTS)
 # -------------------------------------------------
-@app.post("/nova/speak")
+@app.post("/speak")
 async def nova_speak(request: Request):
     try:
         data = await request.json()
